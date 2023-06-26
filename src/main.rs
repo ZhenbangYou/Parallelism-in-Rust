@@ -125,9 +125,7 @@ fn matmul(
 ) {
     let a = split_immut_matrix(a, m, k, num_threads);
     let mut a_slice_lens = vec![];
-    for aa in a.iter() {
-        a_slice_lens.push(aa.len() / k);
-    }
+    a.iter().for_each(|aa| a_slice_lens.push(aa.len() / k));
     let c = split_mut_matrix(c, m, n, num_threads);
     thread::scope(|s| {
         let _: Vec<_> = zip(zip(a, a_slice_lens), c)
