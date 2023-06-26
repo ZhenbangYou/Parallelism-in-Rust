@@ -1,22 +1,44 @@
 use std::iter::zip;
-use std::thread;
+use std::thread::{self, available_parallelism};
 
 fn main() {
     let vec_len = 10;
+    let num_threads = usize::from(available_parallelism().unwrap());
     let a = vec![1; vec_len];
     let b = vec![2; vec_len];
     let mut c = vec![0; vec_len];
-    let (al, ar) = a.split_at(vec_len / 2);
-    let (bl, br) = b.split_at(vec_len / 2);
-    let (cl, cr) = c.split_at_mut(vec_len / 2);
-    let al = Box::new(al);
-    let ar = Box::new(ar);
-    let bl = Box::new(bl);
-    let br = Box::new(br);
-    let cl = Box::new(cl);
-    let cr = Box::new(cr);
-    add_vec(vec![al, ar], vec![bl, br], vec![cl, cr]);
+    add_vec(
+        split_immut_vec(&a, num_threads),
+        split_immut_vec(&b, num_threads),
+        split_mut_vec(&mut c, num_threads),
+    );
     let _: Vec<_> = c.iter().map(|x| println!("{x}")).collect();
+}
+
+fn split_immut_vec<T>(v: &Vec<T>, num_slices: usize) -> Vec<Box<&[T]>> {
+    let num_slices = std::cmp::min(v.len(), num_slices);
+    let slice_len = (v.len() + num_slices - 1) / num_slices;
+    let mut res = vec![];
+    let mut remaining = &v[..];
+    for _ in 0..num_slices - 1 {
+        let (head, tail) = remaining.split_at(slice_len);
+        remaining = tail;
+        res.push(Box::new(head));
+    }
+    res
+}
+
+fn split_mut_vec<T>(v: &mut Vec<T>, num_slices: usize) -> Vec<Box<&mut [T]>> {
+    let num_slices = std::cmp::min(v.len(), num_slices);
+    let slice_len = (v.len() + num_slices - 1) / num_slices;
+    let mut res = vec![];
+    let mut remaining = &mut v[..];
+    for _ in 0..num_slices - 1 {
+        let (head, tail) = remaining.split_at_mut(slice_len);
+        remaining = tail;
+        res.push(Box::new(head));
+    }
+    res
 }
 
 fn add_vec(a: Vec<Box<&[i32]>>, b: Vec<Box<&[i32]>>, c: Vec<Box<&mut [i32]>>) {
