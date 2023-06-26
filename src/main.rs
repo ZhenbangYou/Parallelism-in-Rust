@@ -19,7 +19,7 @@ fn main() {
     let k = 10;
     let a = vec![1; m * k];
     let b = vec![1; k * n];
-    let mut c = vec![0; m * n];
+    let mut c = vec![10; m * n];
     matmul(&a, &b, &mut c, m, n, k, num_threads);
     for x in 0..m {
         for y in 0..n {
@@ -139,9 +139,7 @@ fn matmul(
 
 // C(m, n) = A(m, k) * B(k, n)
 fn matmul_slice(a: Box<&[i32]>, b: &[i32], c: Box<&mut [i32]>, m: usize, n: usize, k: usize) {
-    for item in c.iter_mut() {
-        *item = 0;
-    }
+    c.iter_mut().for_each(|item| *item = 0);
     for x in 0..m {
         for z in 0..k {
             for y in 0..n {
