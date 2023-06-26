@@ -20,10 +20,12 @@ fn main() {
 }
 
 fn add_vec(a: Vec<Box<&[i32]>>, b: Vec<Box<&[i32]>>, c: Vec<Box<&mut [i32]>>) {
-    let _: Vec<_> = zip(zip(a, b), c)
-        .map(|((x, y), z)| thread::spawn(|| add_vec_slice(x, y, z)))
-        .map(|t| t.join())
-        .collect();
+    thread::scope(|s| {
+        let _: Vec<_> = zip(zip(a, b), c)
+            .map(|((x, y), z)| s.spawn(|| add_vec_slice(x, y, z)))
+            .map(|t| t.join())
+            .collect();
+    })
 }
 
 fn add_vec_slice(a: Box<&[i32]>, b: Box<&[i32]>, c: Box<&mut [i32]>) {
