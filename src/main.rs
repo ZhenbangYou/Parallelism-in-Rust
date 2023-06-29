@@ -28,6 +28,15 @@ fn main() {
     let b = vec![1; k * n];
     let mut c = vec![10; m * n];
     matmul(&a, &b, &mut c, m, n, k, num_threads);
+    matmul_unsafe(
+        I32ConstPtrWrapper(&a[0] as *const i32),
+        I32ConstPtrWrapper(&b[0] as *const i32),
+        I32MutPtrWrapper(&mut c[0] as *mut i32),
+        m,
+        n,
+        k,
+        num_threads,
+    );
     for x in 0..m {
         for y in 0..n {
             print!("{} ", c[x * n + y]);
@@ -196,4 +205,52 @@ fn matmul_slice(a: Box<&[i32]>, b: &[i32], c: Box<&mut [i32]>, m: usize, n: usiz
             }
         }
     }
+}
+
+// C(m, n) = A(m, k) * B(k, n)
+fn matmul_unsafe(
+    a: I32ConstPtrWrapper,
+    b: I32ConstPtrWrapper,
+    c: I32MutPtrWrapper,
+    m: usize,
+    n: usize,
+    k: usize,
+    num_threads: usize,
+) {
+    for i in 0..(k * n) {
+        unsafe {
+            *(c.0).offset(i as isize) = 0;
+        }
+    }
+    let num_slices = std::cmp::min(m, num_threads);
+    let slice_len = (n + num_slices - 1) / num_slices;
+    thread::scope(|s| {
+        let _: Vec<_> = (0..num_slices)
+            .into_iter()
+            .map(|thread_id| {
+                s.spawn(move || {
+                    for x in
+                        (thread_id * slice_len)..(std::cmp::min((thread_id + 1) * slice_len, m))
+                    {
+                        for z in 0..k {
+                            for y in 0..n {
+                                let a = a;
+                                let b = b;
+                                let c = c;
+
+                                // c[x][y] += a[x][z] * b[z][y]
+                                // c[x * n + y] += a[x * k + z] * b[z * n + y];
+                                unsafe {
+                                    *(c.0).offset((x * n + y) as isize) += *(a.0)
+                                        .offset((x * k + z) as isize)
+                                        * *(b.0).offset((z * n + y) as isize);
+                                }
+                            }
+                        }
+                    }
+                })
+            })
+            .map(|h| h.join())
+            .collect();
+    });
 }
