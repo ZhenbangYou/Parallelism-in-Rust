@@ -1,6 +1,6 @@
 use num_traits::Num;
 use std::iter::zip;
-use std::ops::AddAssign;
+use std::ops::{AddAssign, Deref};
 use std::thread::{self, available_parallelism};
 
 fn main() {
@@ -103,12 +103,24 @@ struct ConstPtrWrapper<T>(*const T);
 
 unsafe impl<T> Send for ConstPtrWrapper<T> {}
 unsafe impl<T> Sync for ConstPtrWrapper<T> {}
+impl<T> Deref for ConstPtrWrapper<T> {
+    type Target = *const T;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Clone, Copy)]
 struct MutPtrWrapper<T>(*mut T);
 
 unsafe impl<T> Send for MutPtrWrapper<T> {}
 unsafe impl<T> Sync for MutPtrWrapper<T> {}
+impl<T> Deref for MutPtrWrapper<T> {
+    type Target = *mut T;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 fn add_vec_unsafe<T: Num + Copy>(
     a: ConstPtrWrapper<T>,
@@ -131,7 +143,7 @@ fn add_vec_unsafe<T: Num + Copy>(
                         let b = b;
                         let c = c;
                         unsafe {
-                            *(c.0).offset(k) = *(a.0).offset(k) + *(b.0).offset(k);
+                            *c.offset(k) = *a.offset(k) + *b.offset(k);
                         }
                     }
                 })
@@ -233,7 +245,7 @@ fn matmul_unsafe<T: Num + AddAssign + Copy>(
 ) {
     for i in 0..(k * n) {
         unsafe {
-            *(c.0).offset(i as isize) = T::zero();
+            *c.offset(i as isize) = T::zero();
         }
     }
     let num_slices = std::cmp::min(m, num_threads);
@@ -255,9 +267,9 @@ fn matmul_unsafe<T: Num + AddAssign + Copy>(
                                 // c[x][y] += a[x][z] * b[z][y]
                                 // c[x * n + y] += a[x * k + z] * b[z * n + y];
                                 unsafe {
-                                    *(c.0).offset((x * n + y) as isize) += *(a.0)
+                                    *c.offset((x * n + y) as isize) += *a
                                         .offset((x * k + z) as isize)
-                                        * *(b.0).offset((z * n + y) as isize);
+                                        * *b.offset((z * n + y) as isize);
                                 }
                             }
                         }
