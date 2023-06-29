@@ -1,4 +1,6 @@
+use num_traits::Num;
 use std::iter::zip;
+use std::ops::AddAssign;
 use std::thread::{self, available_parallelism};
 
 fn main() {
@@ -10,9 +12,9 @@ fn main() {
     let mut c = vec![0; vec_len];
     add_vec(&a, &b, &mut c, num_threads);
     add_vec_unsafe(
-        I32ConstPtrWrapper(&a[0] as *const i32),
-        I32ConstPtrWrapper(&b[0] as *const i32),
-        I32MutPtrWrapper(&mut c[0] as *mut i32),
+        ConstPtrWrapper(&a[0] as *const i32),
+        ConstPtrWrapper(&b[0] as *const i32),
+        MutPtrWrapper(&mut c[0] as *mut i32),
         vec_len,
         num_threads,
     );
@@ -29,9 +31,9 @@ fn main() {
     let mut c = vec![10; m * n];
     matmul(&a, &b, &mut c, m, n, k, num_threads);
     matmul_unsafe(
-        I32ConstPtrWrapper(&a[0] as *const i32),
-        I32ConstPtrWrapper(&b[0] as *const i32),
-        I32MutPtrWrapper(&mut c[0] as *mut i32),
+        ConstPtrWrapper(&a[0] as *const i32),
+        ConstPtrWrapper(&b[0] as *const i32),
+        MutPtrWrapper(&mut c[0] as *mut i32),
         m,
         n,
         k,
@@ -73,7 +75,12 @@ fn split_mut_vec<T>(v: &mut Vec<T>, num_slices: usize) -> Vec<Box<&mut [T]>> {
     res
 }
 
-fn add_vec(a: &Vec<i32>, b: &Vec<i32>, c: &mut Vec<i32>, num_threads: usize) {
+fn add_vec<T: Num + Send + Sync + Copy>(
+    a: &Vec<T>,
+    b: &Vec<T>,
+    c: &mut Vec<T>,
+    num_threads: usize,
+) {
     let a = split_immut_vec(a, num_threads);
     let b = split_immut_vec(b, num_threads);
     let c = split_mut_vec(c, num_threads);
@@ -85,28 +92,28 @@ fn add_vec(a: &Vec<i32>, b: &Vec<i32>, c: &mut Vec<i32>, num_threads: usize) {
     })
 }
 
-fn add_vec_slice(a: Box<&[i32]>, b: Box<&[i32]>, c: Box<&mut [i32]>) {
+fn add_vec_slice<T: Num + Copy>(a: Box<&[T]>, b: Box<&[T]>, c: Box<&mut [T]>) {
     for i in 0..a.len() {
         c[i] = a[i] + b[i];
     }
 }
 
 #[derive(Clone, Copy)]
-struct I32ConstPtrWrapper(*const i32);
+struct ConstPtrWrapper<T>(*const T);
 
-unsafe impl Send for I32ConstPtrWrapper {}
-unsafe impl Sync for I32ConstPtrWrapper {}
+unsafe impl<T> Send for ConstPtrWrapper<T> {}
+unsafe impl<T> Sync for ConstPtrWrapper<T> {}
 
 #[derive(Clone, Copy)]
-struct I32MutPtrWrapper(*mut i32);
+struct MutPtrWrapper<T>(*mut T);
 
-unsafe impl Send for I32MutPtrWrapper {}
-unsafe impl Sync for I32MutPtrWrapper {}
+unsafe impl<T> Send for MutPtrWrapper<T> {}
+unsafe impl<T> Sync for MutPtrWrapper<T> {}
 
-fn add_vec_unsafe(
-    a: I32ConstPtrWrapper,
-    b: I32ConstPtrWrapper,
-    c: I32MutPtrWrapper,
+fn add_vec_unsafe<T: Num + Copy>(
+    a: ConstPtrWrapper<T>,
+    b: ConstPtrWrapper<T>,
+    c: MutPtrWrapper<T>,
     n: usize,
     num_slices: usize,
 ) {
@@ -173,10 +180,10 @@ fn split_mut_matrix<T>(
 }
 
 // C(m, n) = A(m, k) * B(k, n)
-fn matmul(
-    a: &Vec<i32>,
-    b: &Vec<i32>,
-    c: &mut Vec<i32>,
+fn matmul<T: Num + AddAssign + Send + Sync + Copy>(
+    a: &Vec<T>,
+    b: &Vec<T>,
+    c: &mut Vec<T>,
     m: usize,
     n: usize,
     k: usize,
@@ -195,8 +202,15 @@ fn matmul(
 }
 
 // C(m, n) = A(m, k) * B(k, n)
-fn matmul_slice(a: Box<&[i32]>, b: &[i32], c: Box<&mut [i32]>, m: usize, n: usize, k: usize) {
-    c.iter_mut().for_each(|item| *item = 0);
+fn matmul_slice<T: Num + AddAssign + Copy>(
+    a: Box<&[T]>,
+    b: &[T],
+    c: Box<&mut [T]>,
+    m: usize,
+    n: usize,
+    k: usize,
+) {
+    c.iter_mut().for_each(|item| *item = T::zero());
     for x in 0..m {
         for z in 0..k {
             for y in 0..n {
@@ -208,10 +222,10 @@ fn matmul_slice(a: Box<&[i32]>, b: &[i32], c: Box<&mut [i32]>, m: usize, n: usiz
 }
 
 // C(m, n) = A(m, k) * B(k, n)
-fn matmul_unsafe(
-    a: I32ConstPtrWrapper,
-    b: I32ConstPtrWrapper,
-    c: I32MutPtrWrapper,
+fn matmul_unsafe<T: Num + AddAssign + Copy>(
+    a: ConstPtrWrapper<T>,
+    b: ConstPtrWrapper<T>,
+    c: MutPtrWrapper<T>,
     m: usize,
     n: usize,
     k: usize,
@@ -219,7 +233,7 @@ fn matmul_unsafe(
 ) {
     for i in 0..(k * n) {
         unsafe {
-            *(c.0).offset(i as isize) = 0;
+            *(c.0).offset(i as isize) = T::zero();
         }
     }
     let num_slices = std::cmp::min(m, num_threads);
