@@ -1,6 +1,8 @@
+#![feature(portable_simd)]
 use num_traits::Num;
 use std::iter::zip;
 use std::ops::{AddAssign, Deref};
+use std::simd::Simd;
 use std::thread::{self, available_parallelism};
 
 fn main() {
@@ -18,6 +20,7 @@ fn main() {
         vec_len,
         num_threads,
     );
+    add_vec_simd_i32(&a, &b, &mut c);
     let _: Vec<_> = c.iter().map(|x: &i32| println!("{x}")).collect();
 
     println!();
@@ -73,6 +76,22 @@ fn split_mut_vec<T>(v: &mut Vec<T>, num_slices: usize) -> Vec<Box<&mut [T]>> {
     }
     res.push(Box::new(remaining));
     res
+}
+
+fn add_vec_simd_i32(a: &Vec<i32>, b: &Vec<i32>, c: &mut Vec<i32>) {
+    const LANES: usize = 8;
+    let len = a.len();
+    let mut i = 0;
+    while i + LANES <= len {
+        let va: Simd<i32, LANES> = Simd::from_slice(&a[i..]);
+        let vb: Simd<i32, LANES> = Simd::from_slice(&b[i..]);
+        let vc = va + vb;
+        vc.copy_to_slice(&mut c[i..]);
+        i += LANES;
+    }
+    for j in i..len {
+        c[j] = a[j] + b[j];
+    }
 }
 
 fn add_vec<T: Num + Send + Sync + Copy>(
