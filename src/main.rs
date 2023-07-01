@@ -106,7 +106,6 @@ fn add_vec<T: Num + Send + Sync + Copy>(
     thread::scope(|s| {
         let _: Vec<_> = zip(zip(a, b), c)
             .map(|((x, y), z)| s.spawn(|| add_vec_slice(x, y, z)))
-            .map(|t| t.join())
             .collect();
     })
 }
@@ -167,7 +166,6 @@ fn add_vec_unsafe<T: Num + Copy>(
                     }
                 })
             })
-            .map(|h| h.join())
             .collect();
     })
 }
@@ -227,7 +225,6 @@ fn matmul<T: Num + AddAssign + Send + Sync + Copy>(
     thread::scope(|s| {
         let _: Vec<_> = zip(zip(a, a_slice_lens), c)
             .map(|((aa, aa_len), cc)| s.spawn(move || matmul_slice(aa, b, cc, aa_len, n, k)))
-            .map(|t| t.join())
             .collect();
     })
 }
@@ -295,7 +292,6 @@ fn matmul_unsafe<T: Num + AddAssign + Copy>(
                     }
                 })
             })
-            .map(|h| h.join())
             .collect();
     });
 }
